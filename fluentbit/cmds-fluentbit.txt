@@ -1,0 +1,127 @@
+Fluentbit é mais novo que fluentd, foi feito pensando em performance para k8s
+	Fluentd mais mais popular no mercado, inumeros plugins, fluentbit como irmão mais novo
+	também tem inumeros plugins, porem menor... e voce constroi um pipeline uma maneira de como vai insegir os logs,
+	transforma-los e nisso utiliza varios plugins disponiveis para Input, Parser, Filter, Output
+	
+- Input
+	- é a entrada, vc tem um plugin de entrada que o ajuda coletar logs de varios sources, pode tbm transformar em metricas
+		com plugins de coleta de metricas (Statds, Collectd, CPU, DiskIO, Docker metrics, docker events, HTTP pode consultar
+		um ponto de extremidade, Tail, Network e assim por diante.
+
+- Parser
+	- Para analisar os dados que acabou de coletar, 2 passo do pipeline, disponiveis plugis(json que é
+	muito usado no logging, Regexp regular expression para transformar, também formatos de registros logfmt, decoders decodificar
+	alguns valores do fluxo de log.
+
+- Filter
+	- Depois de coletar e analisar os logs deseja filtar, filter permitirá que modifique, descartar informações não relevantes
+	dos logs, semelhante as outras etapas tem muitos plugin disponiveis(Expect, GeopIp, Grep, K8S, Record Modifier modificar 
+	o registro, Rewrite Tag, Throttle, Nest, Modifiy). esse modulo é muito rapido, importante quando tem alguns logs que tem 
+	que transformar-lo para o formato certo ao armazenamento. 
+	
+	Outros plugin interessante, honestamente nunca utilizei é o scripts LUA, basicamente vc cria scripts no formato LUA em
+	onde pode criar seus codigos, pq simplismente as vezes deseja anonimizar os dados. Ex pode criar uma function receber alguns
+	valores como tag, timestamp, record e retornar com outras informações agregadas ocultando dados sensiveis dos logs. 
+	nunca tive a necessidade mais ta la disponivel.
+	
+- Output
+	- Então por ultimo tem o roteamento, output, a saida destes logs. basicamente depois de coletar, transformar, filtar é
+	desejavel enviar para algum lugar, o incrivel do fluentbit é que você pode conectar varias saidas ao pipeline, ou seja,
+	ficaremos encarregados de armazenar log stream para varias fontes de dados e poderia dizer que todos os logs provientes
+	dessa tag irão para xpto, e outra para yzx, pode colocar muitas regras avançadas para decidir para onde deseja enviar e
+	o que enviar dos logs. Tem varios plugin disponiveis(Loki, Azure Blob, Azure Log analytics, Google big query, Eslasticsearch
+	Stdout, Influx db, Banco de dados também como stackdriver, HTTP, Datadog, Dynatrace.. não tem para Logic Monitor.
+	
+RESUMO:
+	Temos plugin para input que ficara responsavel de coletar dados em uma fonte especifica e transformar, ntão vc terá 
+	plugin para output que enviará o log stream, o fluxo no formato desejado para soluções desejadas. 
+	
+	Tecnicamente logico com rules, permissions e etc... a arquitetura tem um daemon set, uma configuração, um arquivo guardado
+	em configmap, estara definido o pipeline, então vc insere Input, Parser, Filter, Output definido a sequencia do pipeline 
+	coletar, analisas, transformar, enviar seus dados para fonte de dados. Uma  solução muito boa para ajudar a configurar o 
+	fluentbit é o calyptia. Ele fornece uma visualização da configuração, basicamente coloca o arquivo de configuração e pode
+	alterar e isso ajuda a validar a sintaxe e visualizar o pipeline que foi construido. E logico tem muitos exemplos disponiveis
+
+VANTAGENS:	
+	Porque o Fluentbit é tão poderoso? O recurso interessante é que você pode adicionar diretamente nas annotations em seus 
+	arquivos de implantação, nos deployment. Kind:Pod, em annotations: fluentbit.io/parser:apache.
+	Permitirão que especifique fluentbit que tipo de parser(analisador) você deve usar para coletar os dados daquele pod
+	em particular. Ex. annotations: fluentbit.io/exclude:"true".
+	
+	A arquitetura do plugin torna um pouco mais poderoso e mais personalizavel, em comparação com promptel que é uma boa
+	solução também, mais é muito mais simples seus meios de configurações. também suporta muitos conseitos de segurança
+	especialmente plugins de output, pq no final a analise, tranformar e etc.. muitas metricas são confidenciais e enviar
+	para algum lugar quer ter certeza de sobre as segurança e formas de envio dos dados.
+	
+Fluentbit x fluentd
+Por mais que tem propostas semelhantes, Fluentbit x fluentd tem suas diferenças estruturais e certas vantagens do fluentbit
+até por ser o irmão mais novo do fluentd as vantagens tecnologicas sobresaem
+
+Fluentbit
+	- Language C, Memory ~650kb, Dependencies 0, plugin certa de 70 e crescente.
+	- Fluentbit foi altamente otimizado para ter baixo custo para ser projetado para rodar em um ambiente de alta escala
+	com muitos processamentos de log, foi claramente projeto desde o inicio para kubernetes. onde foi se pensado sobre 
+	existencias de muitos nodes, pods, componentes que geram muitos logs, pode gerar toneladas de logs então eles pensaram
+	claramente um design, uma arquitetura profunda sobre isto. 
+	
+	Fluentbit tem um exportador Fluentd.
+	Você pode pensar também em combinar o uso de fluentbit com Fluentd para pipelines complexos e aproveitar os diversos
+	plugins existentes no fluentd. Ex pode imaginar usando o fluentbit para transformar os logs, analisar e etc...  
+	e apos enviar de volta para o fluentd e então fluentd fará o resto aproveitando a maturidade ou recurso inexistentes
+	no fluentbit, tirar do seu proveito do maior numero de plugins, exemplo output Logic Monitor. Então faz sentido primeiro
+	fazer o trabalho com fluentbit e en seguida apenas utilizar apenas forma de logs que sua fonte de dados aceita.
+	
+
+Fluentd
+	- Language C & Ruby, Memory ~40mb, Dependencies requer numeros de gems, plugin 1000+
+
+Install Loki with Fluentbit
+	helm repo add grafana https://grafana.github.io/helm-charts
+	helm repo update
+	helm upgrade --install loki --namespace=loki grafana/loki-stack --set fluent-bit.enabled=true,promtail.enabled=false
+
+kubectl get all -n loki
+
+helm uninstall loki -n loki
+========================== // ======================
+
+Installation of Fluentbit	
+	helm repo add fluent https://fluent.github.io/helm-charts
+	helm repo update
+	helm upgrade --install fluent-bit fluent/fluent-bit --namespace=fluent-bit
+
+kubectl config set-context --current --namespace=fluent-bit
+
+kubectl get all -n fluent-bit
+
+kubectl get cm -n fluent-bit
+
+kubectl edit cm fluent-bit
+    [OUTPUT]
+        Name stdout
+        Match kube.*
+        Format json
+        Json_date_key timestamp
+        Json_date_format iso8601
+
+kubectl get -o yaml cm fluent-bit -n fluent-bit
+kubectl get -o yaml cm fluent-bit -n fluent-bit -o yaml > fluent-bit_cm.yaml
+cat fluent-bit_cm.yaml
+
+Aplicar novas configurações:
+			- Obter daemonset e delete e reaplica-lo e ele vai reiniciar as partes e carregarar
+			as novas configurações do fluentbit 
+			
+kubectl get ds -n fluent-bit -n fluent-bit
+kubectl get ds -n fluent-bit -n fluent-bit -o yaml > fluent-bit_ds.yaml
+kubectl delete ds fluent-bit -n fluent-bit
+kubectl apply -f fluent-bit_ds.yaml -n fluent-bit
+
+verificar logs:
+kubectl get pods -n fluent-bit
+kubectl logs fluent-bit-cmbkp
+	- adicionado timestamp, kubernetes, logs 
+
+kubectl config set-context --current --namespace=prometheus	
+kubectl port-forward prometheus-prom-operator-01-kube-prom-prometheus-0 9090:9090 --namespace=prometheus
+kubectl port-forward svc/prom-operator-01-grafana 8080:80 --namespace=prometheus
