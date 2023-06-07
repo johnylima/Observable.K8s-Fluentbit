@@ -1,9 +1,5 @@
-# Is it Observable?
-<p align="center"><img src="/image/logo.png" width="40%" alt="Prometheus Logo" /></p>
-
 ## K8s and Loging with Fluentbit
 <p align="center"><img src="/image/fluentbit.png" width="40%" alt="fluentbit Logo" /></p>
-Repository containing the files for the Episode 3 of Is it Observable : K8s and Fluentbit
 
 
 This repository showcase the usage of the Loki  by using GKE with :
